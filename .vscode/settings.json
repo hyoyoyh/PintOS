@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "timer.h": "c",
+        "inttypes.h": "c",
+        "interrupt.h": "c",
+        "io.h": "c"
+    }
+}

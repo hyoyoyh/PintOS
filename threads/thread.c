@@ -62,6 +62,14 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux) {
+	const struct thread *t1 = list_entry(a, struct thread, elem);
+	const struct thread *t2 = list_entry(b, struct thread, elem);
+
+	return t1->priority > t2->priority;
+};
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -240,7 +248,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, priority_less, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -309,12 +317,14 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+// 스레드의 우선순위를 넘겨받은 인자로 설정
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
+// 스레드의 우선순위를 반환함
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
