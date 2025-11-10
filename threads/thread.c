@@ -218,6 +218,8 @@ void thread_sleep(int64_t wakeup_tick)
 	// 현재 실행 중인 스레드의 포인터를 가져오기
 	struct thread *cur = thread_current();
 
+	ASSERT(!intr_context()); // 인터럽트 중이 아닌지 확인 (안전 검사)
+
 	// idle_thread는 시스템 유휴 상태에서 돌아가는 스레드이므로 잠재우면 안 됨
 	if (cur == idle_thread)
 		return;
@@ -276,7 +278,6 @@ void thread_awake(int64_t now_tick)
 		}
 		else
 		{
-			// 남은 스레드들은 아직 깰 시간이 안 됐으므로 검사 종료
 			break;
 		}
 	}
@@ -295,7 +296,10 @@ bool cmp_tick(const struct list_elem *a, const struct list_elem *b, void *aux UN
 
 	// 두 스레드의 wakeup_tick 값을 비교하여 t1이 먼저 깨워져야 한다면 true를 반환
 	// 즉, t1이 t2보다 먼저 깨어나야 한다면 t1이 리스트 앞에 오게 된다.
-	return t1->wakeup_tick < t2->wakeup_tick;
+	if (t1->wakeup_tick != t2->wakeup_tick)
+		return t1->wakeup_tick < t2->wakeup_tick; // 빨리 깰 스레드 먼저
+	else
+		return t1->priority > t2->priority; // 우선순위 높은 스레드 먼저
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
