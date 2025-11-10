@@ -44,28 +44,6 @@ bool sleep_list_less(const struct list_elem *a, const struct list_elem *b, void 
 	return t1->wakeTime < t2->wakeTime;
 };
 
-void thread_wake_up(void) {
-	struct thread *thread_sleep;
-
-	if (!list_empty(&sleep_list)) {
-		thread_sleep = list_entry(list_front(&sleep_list), struct thread, elem);
-	}
-
-	while (!list_empty(&sleep_list)) {
-		thread_sleep = list_entry(list_front(&sleep_list), struct thread, elem);
-		if (timer_ticks() >= thread_sleep->wakeTime && !list_empty(&sleep_list)) {
-			list_pop_front(&sleep_list);
-	
-			enum intr_level old_level = intr_disable (); 
-			thread_unblock(thread_sleep);
-			intr_set_level (old_level);
-		} else {
-			break;
-		}
-	}
-
-}
-
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -201,6 +179,22 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	thread_wake_up();
 }
 
+void thread_wake_up(void) {
+	struct thread *sleep_thread; 
+
+	while (!list_empty(&sleep_list)) {
+		sleep_thread = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (timer_ticks() >= sleep_thread->wakeTime && !list_empty(&sleep_list)) {
+			list_pop_front(&sleep_list);
+	
+			enum intr_level old_level = intr_disable (); 
+			thread_unblock(sleep_thread);
+			intr_set_level (old_level);
+		} else {
+			break;
+		}
+	}
+}
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */
 static bool
