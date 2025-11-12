@@ -5,6 +5,6 @@ alarm-single PASS
 priority-donate-multiple2 FAIL
 alarm-priority PASS
 alarm-zero PASS
-priority-change PASS
+priority-change FAIL
 alarm-negative PASS
 alarm-multiple PASS
