@@ -203,36 +203,38 @@ list_push_back (struct list *list, struct list_elem *elem) {
 	list_insert (list_end (list), elem);
 }
 
-/* ELEM을 리스트에서 제거하고 그 뒤에 따라오던 요소를 반환한다.
-	ELEM이 리스트에 없으면 정의되지 않은 동작이다.
+/* Removes ELEM from its list and returns the element that
+   followed it.  Undefined behavior if ELEM is not in a list.
 
-	ELEM을 제거한 후 리스트의 요소로 취급하는 것은 안전하지 않다.
-	특히, 제거 후 ELEM에 대해 list_next() 또는 list_prev()를 사용하면
-	정의되지 않은 동작이 발생한다. 이는 리스트의 요소를 제거하는
-	단순한 반복문이 실패할 것임을 의미한다:
+   It's not safe to treat ELEM as an element in a list after
+   removing it.  In particular, using list_next() or list_prev()
+   on ELEM after removal yields undefined behavior.  This means
+   that a naive loop to remove the elements in a list will fail:
 
- ** 이렇게 하지 마시오 **
+ ** DON'T DO THIS **
  for (e = list_begin (&list); e != list_end (&list); e = list_next (e))
  {
- ...e로 뭔가를 수행...
+ ...do something with e...
  list_remove (e);
  }
- ** 이렇게 하지 마시오 **
+ ** DON'T DO THIS **
 
- 리스트에서 요소를 반복하며 제거하는 올바른 방법은 다음과 같다:
+ Here is one correct way to iterate and remove elements from a
+list:
 
 for (e = list_begin (&list); e != list_end (&list); e = list_remove (e))
 {
-...e로 뭔가를 수행...
+...do something with e...
 }
 
-리스트의 요소를 free()해야 한다면 더 보수적인 방법이 필요하다.
-다음은 그런 경우에도 작동하는 대체 전략이다:
+If you need to free() elements of the list then you need to be
+more conservative.  Here's an alternate strategy that works
+even in that case:
 
 while (!list_empty (&list))
 {
 struct list_elem *e = list_pop_front (&list);
-...e로 뭔가를 수행...
+...do something with e...
 }
 */
 struct list_elem *

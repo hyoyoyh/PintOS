@@ -211,43 +211,54 @@ thread_create (const char *name, int priority,
 
 	return tid;
 }
-void 
-donate_return(struct thread *cur) {
-	struct thread *holder = cur->waiton_lock->holder;
-	holder->priority = holder->origin_priority;
-	struct list_elem *e;
-	for (e = list_begin (&holder->donators); e != list_end (&holder->donators); e = list_next (e))
-	{
-	struct thread *issakki = list_entry(e, struct thread, elem);
-	if (issakki == cur) {
-            list_remove(e);
-            break;
-	}
-	// 만약 아직도 기부자가 남아잇을수도 잇으니까
-	if (!list_empty(&holder->donators)) {
-		struct thread *max_do = list_entry(list_front(&holder->donators), struct thread , elem);
-		if (max_do->priority > holder->origin_priority) {
-			holder->priority = max_do->priority; }
-        else
-            holder->priority = holder->origin_priority;
-		
-	}
-	
+bool compare_donate_priority(const struct list_elem *a,
+                                    const struct list_elem *b,
+                                    void *aux UNUSED) {
+  const struct thread *t1 = list_entry(a, struct thread, for_donating_elem);
+  const struct thread *t2 = list_entry(b, struct thread, for_donating_elem);
+  return t1->priority > t2->priority;
 }
+void donate_return(struct lock *lock) {
+  struct thread *holder = thread_current();      // 현재 락을 푸는 스레드
+  ASSERT(lock->holder == holder); // 현재 쓰레드가 락을 가지고있어야 된다네요
+
+  // 락이 풀렸으니 락을 기다리던애들을 리스트에서 빼주기
+  // 순회 만들기
+  // 리스트의 맨앞이 맨끝이 아니라면 == 순회완료
+  // remove 주의 사항에서 나와있는 것의 보완 버전으로 순회 및 조건 맞으면 삭제
+  // 다음으로 넘어가기
+  struct list_elem *front = list_front(&holder->donators);
+  while (front != list_end(&holder->donators)) {
+    struct thread *t = list_entry(front, struct thread, for_donating_elem);
+    struct list_elem *next = front->next;
+    if (t->waiton_lock == lock) {
+      list_remove(front);
+    }
+    front = next;
+  }
+
+  // 2) 남은 기부자가 있으면 그 중 최고 priority와 origin_priority 중 큰 값을 채택
+  if (!list_empty(&holder->donators)) {
+    list_sort(&holder->donators, compare_donate_priority, NULL);
+    struct thread *top = list_entry(list_front(&holder->donators), struct thread, for_donating_elem);
+    holder->priority = (top->priority > holder->origin_priority) ? top->priority : holder->origin_priority;
+  } else {
+    holder->priority = holder->origin_priority;
+  }
 }
+
 void 
 donate_priority(struct thread *t, int limit) {
     if (t == NULL || t->waiton_lock == NULL || limit >= 8 || t->waiton_lock->holder == NULL) return;
     struct thread *holder = t->waiton_lock->holder;
     if (t->priority > holder->priority) {
         if (holder->priority == holder->origin_priority)
-            holder->origin_priority = holder->priority;
-        holder->priority = t->priority;
+       	 	holder->priority = t->priority;
         if (holder->status == THREAD_READY) {
             list_remove(&holder->elem);
-            list_insert_ordered(&ready_list, &holder->elem, compare_priority, NULL);
+            list_insert_ordered(&ready_list, &holder->elem, compare_donate_priority, NULL);
         }
-        donate_priority(holder, ++limit);
+        donate_priority(holder, limit + 1);
     }
 }
 
