@@ -55,7 +55,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
-
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 static void idle (void *aux UNUSED);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
@@ -192,7 +192,6 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
-
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -206,8 +205,50 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+		if (t->priority > thread_current()->priority) {
+		thread_yield();
+	}
 
 	return tid;
+}
+void 
+donate_return(struct thread *cur) {
+	struct thread *holder = cur->waiton_lock->holder;
+	holder->priority = holder->origin_priority;
+	struct list_elem *e;
+	for (e = list_begin (&holder->donators); e != list_end (&holder->donators); e = list_next (e))
+	{
+	struct thread *issakki = list_entry(e, struct thread, elem);
+	if (issakki == cur) {
+            list_remove(e);
+            break;
+	}
+	// 만약 아직도 기부자가 남아잇을수도 잇으니까
+	if (!list_empty(&holder->donators)) {
+		struct thread *max_do = list_entry(list_front(&holder->donators), struct thread , elem);
+		if (max_do->priority > holder->origin_priority) {
+			holder->priority = max_do->priority; }
+        else
+            holder->priority = holder->origin_priority;
+		
+	}
+	
+}
+}
+void 
+donate_priority(struct thread *t, int limit) {
+    if (t == NULL || t->waiton_lock == NULL || limit >= 8 || t->waiton_lock->holder == NULL) return;
+    struct thread *holder = t->waiton_lock->holder;
+    if (t->priority > holder->priority) {
+        if (holder->priority == holder->origin_priority)
+            holder->origin_priority = holder->priority;
+        holder->priority = t->priority;
+        if (holder->status == THREAD_READY) {
+            list_remove(&holder->elem);
+            list_insert_ordered(&ready_list, &holder->elem, compare_priority, NULL);
+        }
+        donate_priority(holder, ++limit);
+    }
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -232,6 +273,14 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+
+    struct thread *t1 = list_entry(a, struct thread, elem);
+	struct thread *t2 = list_entry(b, struct thread, elem);
+	bool result = t1->priority > t2->priority;
+    return result;
+}
+
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -240,7 +289,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem,compare_priority,NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -303,7 +352,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+	list_insert_ordered (&ready_list, &curr->elem,compare_priority,NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -312,7 +361,10 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
-	
+ 	struct thread *front = list_entry(list_front(&ready_list),struct thread, elem);
+	if (new_priority < front->priority) {
+		thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -409,6 +461,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->origin_priority = priority;
 	t->magic = THREAD_MAGIC;
 }
 

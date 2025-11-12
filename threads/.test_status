@@ -3,8 +3,8 @@ priority-donate-one FAIL
 alarm-simultaneous PASS
 alarm-single PASS
 priority-donate-multiple2 FAIL
-alarm-priority FAIL
+alarm-priority PASS
 alarm-zero PASS
-priority-change FAIL
+priority-change PASS
 alarm-negative PASS
 alarm-multiple PASS

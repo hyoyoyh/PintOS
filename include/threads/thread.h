@@ -18,6 +18,7 @@ enum thread_status {
 	THREAD_DYING        /* About to be destroyed. */
 };
 
+
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -90,8 +91,11 @@ struct thread {
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
-	int64_t wakeup_time;
+	int priority;
+	int64_t wakeTime;          
+    int origin_priority;    
+    struct list donators;        // 나에게 기부한 스레드들의 리스트
+    struct lock *waiton_lock;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
@@ -140,7 +144,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void donate_priority(struct thread *t, int limit);
 void do_iret (struct intr_frame *tf);
 
-#endif /* threads/thread.h */
+#endif 

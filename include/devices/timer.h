@@ -10,8 +10,9 @@
 void timer_init (void);
 void timer_calibrate (void);
 
+int64_t timer_ticks (void);
 int64_t timer_elapsed (int64_t);
-int64_t wakeup_time(void);
+
 void timer_sleep (int64_t ticks);
 void timer_msleep (int64_t milliseconds);
 void timer_usleep (int64_t microseconds);

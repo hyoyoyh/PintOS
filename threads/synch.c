@@ -1,30 +1,22 @@
-/* This file is derived from source code for the Nachos
-   instructional operating system.  The Nachos copyright notice
-   is reproduced in full below. */
+/* 이 파일은 Nachos 교육용 운영체제의 소스 코드에서 파생된 것입니다.
+   아래는 Nachos의 저작권 고지문 전체입니다. */
 
-/* Copyright (c) 1992-1996 The Regents of the University of California.
-   All rights reserved.
+/* 저작권 (c) 1992-1996 캘리포니아 대학교 이사회(The Regents of the University of California)
+   모든 권리 보유.
 
-   Permission to use, copy, modify, and distribute this software
-   and its documentation for any purpose, without fee, and
-   without written agreement is hereby granted, provided that the
-   above copyright notice and the following two paragraphs appear
-   in all copies of this software.
+   본 소프트웨어 및 문서를 어떠한 목적에서든 사용, 복사, 수정, 배포할 수 있는
+   권한이 무료로, 서면 계약 없이 부여됩니다.
+   단, 위의 저작권 고지문과 아래 두 단락이 모든 복사본에 포함되어야 합니다.
 
-   IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO
-   ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR
-   CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OF THIS SOFTWARE
-   AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF CALIFORNIA
-   HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   캘리포니아 대학교는 본 소프트웨어 및 문서의 사용으로 인해 발생한
+   직접적, 간접적, 특별한, 부수적, 또는 결과적 손해에 대해 책임을 지지 않습니다.
+   이는 캘리포니아 대학교가 그러한 손해의 가능성을 미리 통보받았더라도 마찬가지입니다.
 
-   THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY
-   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-   PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS ON AN "AS IS"
-   BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
-   PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR
-   MODIFICATIONS.
-   */
+   캘리포니아 대학교는 상품성 또는 특정 목적에의 적합성에 대한
+   묵시적 보증을 포함하되 이에 한정되지 않는 모든 보증을 명시적으로 부인합니다.
+   본 소프트웨어는 “있는 그대로(as is)” 제공되며,
+   캘리포니아 대학교는 유지보수, 지원, 업데이트, 개선, 수정에 대한 의무를 지지 않습니다.
+*/
 
 #include "threads/synch.h"
 #include <stdio.h>
@@ -32,15 +24,12 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-/* Initializes semaphore SEMA to VALUE.  A semaphore is a
-   nonnegative integer along with two atomic operators for
-   manipulating it:
+/* 세마포어 SEMA를 VALUE로 초기화합니다.
+   세마포어는 음수가 아닌 정수이며, 두 가지 원자적 연산으로 다룹니다:
 
-   - down or "P": wait for the value to become positive, then
-   decrement it.
-
-   - up or "V": increment the value (and wake up one waiting
-   thread, if any). */
+   - down 또는 "P": 값이 양수가 될 때까지 기다린 후, 1 감소시킴
+   - up 또는 "V": 값을 1 증가시키고, 대기 중인 스레드가 있다면 하나를 깨움 */
+   
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
@@ -49,14 +38,15 @@ sema_init (struct semaphore *sema, unsigned value) {
 	list_init (&sema->waiters);
 }
 
-/* Down or "P" operation on a semaphore.  Waits for SEMA's value
-   to become positive and then atomically decrements it.
 
-   This function may sleep, so it must not be called within an
-   interrupt handler.  This function may be called with
-   interrupts disabled, but if it sleeps then the next scheduled
-   thread will probably turn interrupts back on. This is
-   sema_down function. */
+/* down 또는 "P" 연산:
+   세마포어의 값이 양수가 될 때까지 기다린 후,
+   원자적으로 값을 1 감소시킵니다.
+
+   이 함수는 sleep할 수 있으므로 인터럽트 핸들러 내에서는 호출할 수 없습니다.
+   인터럽트가 비활성화된 상태에서도 호출할 수 있지만,
+   sleep하게 되면 다음에 스케줄된 스레드가 인터럽트를 다시 활성화할 수 있습니다.
+   (이것이 sema_down 함수입니다.) */
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -66,18 +56,17 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, compare_priority,NULL); // 우선순위 높은거 먼저 처리는 필수임
 		thread_block ();
 	}
 	sema->value--;
 	intr_set_level (old_level);
 }
 
-/* Down or "P" operation on a semaphore, but only if the
-   semaphore is not already 0.  Returns true if the semaphore is
-   decremented, false otherwise.
+/* 세마포어의 값이 0이 아닐 때만 down(P) 연산을 시도합니다.
+   세마포어 값이 감소되면 true를, 그렇지 않으면 false를 반환합니다.
 
-   This function may be called from an interrupt handler. */
+   이 함수는 인터럽트 핸들러에서도 호출될 수 있습니다. */
 bool
 sema_try_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -98,10 +87,11 @@ sema_try_down (struct semaphore *sema) {
 	return success;
 }
 
-/* Up or "V" operation on a semaphore.  Increments SEMA's value
-   and wakes up one thread of those waiting for SEMA, if any.
+/* up 또는 "V" 연산:
+   세마포어 값을 1 증가시키고,
+   대기 중인 스레드가 있다면 하나를 깨웁니다.
 
-   This function may be called from an interrupt handler. */
+   이 함수는 인터럽트 핸들러 내에서도 호출될 수 있습니다. */
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -109,7 +99,7 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
+	if (!list_empty (&sema->waiters)) // 기다리는 애가있으면 기다리고 있는 애중 block 인애 꺠우기
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
 	sema->value++;
@@ -118,9 +108,9 @@ sema_up (struct semaphore *sema) {
 
 static void sema_test_helper (void *sema_);
 
-/* Self-test for semaphores that makes control "ping-pong"
-   between a pair of threads.  Insert calls to printf() to see
-   what's going on. */
+/* 세마포어의 동작을 테스트하기 위한 함수입니다.
+   두 스레드가 번갈아가며 제어권을 주고받으며 동작을 확인합니다.
+   printf()를 사용하여 동작 과정을 볼 수 있습니다. */
 void
 sema_self_test (void) {
 	struct semaphore sema[2];
@@ -138,7 +128,7 @@ sema_self_test (void) {
 	printf ("done.\n");
 }
 
-/* Thread function used by sema_self_test(). */
+/* sema_self_test()에서 사용하는 스레드 함수입니다. */
 static void
 sema_test_helper (void *sema_) {
 	struct semaphore *sema = sema_;
@@ -150,22 +140,16 @@ sema_test_helper (void *sema_) {
 		sema_up (&sema[1]);
 	}
 }
-
-/* Initializes LOCK.  A lock can be held by at most a single
-   thread at any given time.  Our locks are not "recursive", that
-   is, it is an error for the thread currently holding a lock to
-   try to acquire that lock.
 
-   A lock is a specialization of a semaphore with an initial
-   value of 1.  The difference between a lock and such a
-   semaphore is twofold.  First, a semaphore can have a value
-   greater than 1, but a lock can only be owned by a single
-   thread at a time.  Second, a semaphore does not have an owner,
-   meaning that one thread can "down" the semaphore and then
-   another one "up" it, but with a lock the same thread must both
-   acquire and release it.  When these restrictions prove
-   onerous, it's a good sign that a semaphore should be used,
-   instead of a lock. */
+/* 락(LOCK)을 초기화합니다.
+   락은 한 번에 단 하나의 스레드만 보유할 수 있습니다.
+   재귀적 락은 아니므로, 락을 보유한 스레드가 다시 획득하려 하면 오류입니다.
+
+   락은 세마포어(초기값 1)의 특수한 형태입니다.
+   차이점은 다음과 같습니다:
+   1) 세마포어는 값이 1보다 클 수 있지만, 락은 오직 하나의 스레드만 가질 수 있음.
+   2) 세마포어는 소유자가 없지만, 락은 반드시 동일한 스레드가 acquire와 release를 모두 수행해야 함.
+   이러한 제약이 불편할 경우 세마포어를 사용하는 것이 좋습니다. */
 void
 lock_init (struct lock *lock) {
 	ASSERT (lock != NULL);
@@ -174,30 +158,39 @@ lock_init (struct lock *lock) {
 	sema_init (&lock->semaphore, 1);
 }
 
-/* Acquires LOCK, sleeping until it becomes available if
-   necessary.  The lock must not already be held by the current
-   thread.
+/* 락을 획득(acquire)합니다.
+   필요하다면 락이 풀릴 때까지 기다립니다.
+   현재 스레드가 이미 이 락을 가지고 있어서는 안 됩니다.
 
-   This function may sleep, so it must not be called within an
-   interrupt handler.  This function may be called with
-   interrupts disabled, but interrupts will be turned back on if
-   we need to sleep. */
+   이 함수는 sleep할 수 있으므로 인터럽트 핸들러 내에서 호출하면 안 됩니다.
+   인터럽트가 비활성화된 상태에서도 호출 가능하지만,
+   sleep 중 인터럽트가 다시 켜질 수 있습니다. */
+
 void
 lock_acquire (struct lock *lock) {
+	// 
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
-
+	struct thread *cur = thread_current();
+	if (lock->holder != NULL) {
+		cur->waiton_lock = lock;
+		list_insert_ordered(&lock->holder->donators, &cur->elem, compare_priority, NULL);
+		donate_priority(cur, 0);
+	}
 	sema_down (&lock->semaphore);
+	cur->waiton_lock = NULL;
 	lock->holder = thread_current ();
+	
 }
 
-/* Tries to acquires LOCK and returns true if successful or false
-   on failure.  The lock must not already be held by the current
-   thread.
 
-   This function will not sleep, so it may be called within an
-   interrupt handler. */
+
+
+/* 락 획득을 시도하고, 성공하면 true를, 실패하면 false를 반환합니다.
+   현재 스레드가 이미 락을 보유하고 있어서는 안 됩니다.
+
+   이 함수는 sleep하지 않으므로 인터럽트 핸들러 내에서도 호출할 수 있습니다. */
 bool
 lock_try_acquire (struct lock *lock) {
 	bool success;
@@ -211,12 +204,12 @@ lock_try_acquire (struct lock *lock) {
 	return success;
 }
 
-/* Releases LOCK, which must be owned by the current thread.
-   This is lock_release function.
+/* 락을 해제(release)합니다.
+   현재 스레드가 반드시 이 락을 보유 중이어야 합니다.
+   (lock_release 함수)
 
-   An interrupt handler cannot acquire a lock, so it does not
-   make sense to try to release a lock within an interrupt
-   handler. */
+   인터럽트 핸들러에서는 락을 획득할 수 없으므로,
+   락을 해제하는 것도 의미가 없습니다. */
 void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
@@ -226,25 +219,24 @@ lock_release (struct lock *lock) {
 	sema_up (&lock->semaphore);
 }
 
-/* Returns true if the current thread holds LOCK, false
-   otherwise.  (Note that testing whether some other thread holds
-   a lock would be racy.) */
+/* 현재 스레드가 LOCK을 보유 중이면 true, 아니면 false를 반환합니다.
+   (다른 스레드가 보유 중인 락을 검사하는 것은 경쟁 상태를 유발할 수 있습니다.) */
 bool
 lock_held_by_current_thread (const struct lock *lock) {
 	ASSERT (lock != NULL);
 
 	return lock->holder == thread_current ();
 }
-
-/* One semaphore in a list. */
+
+/* 조건 변수 리스트 내의 세마포어 요소입니다. */
 struct semaphore_elem {
-	struct list_elem elem;              /* List element. */
-	struct semaphore semaphore;         /* This semaphore. */
+	struct list_elem elem;              /* 리스트 요소 */
+	struct semaphore semaphore;         /* 해당 세마포어 */
 };
 
-/* Initializes condition variable COND.  A condition variable
-   allows one piece of code to signal a condition and cooperating
-   code to receive the signal and act upon it. */
+/* 조건 변수(COND)를 초기화합니다.
+   조건 변수는 한 코드 블록이 어떤 조건을 “신호(signal)”로 알리고,
+   다른 코드 블록이 그 신호를 받아 처리할 수 있도록 합니다. */
 void
 cond_init (struct condition *cond) {
 	ASSERT (cond != NULL);
@@ -252,26 +244,21 @@ cond_init (struct condition *cond) {
 	list_init (&cond->waiters);
 }
 
-/* Atomically releases LOCK and waits for COND to be signaled by
-   some other piece of code.  After COND is signaled, LOCK is
-   reacquired before returning.  LOCK must be held before calling
-   this function.
+/* LOCK을 원자적으로 해제한 뒤, COND가 신호될 때까지 기다립니다.
+   신호가 도착하면 LOCK을 다시 획득한 후 반환합니다.
+   LOCK은 호출 전에 반드시 보유되어 있어야 합니다.
 
-   The monitor implemented by this function is "Mesa" style, not
-   "Hoare" style, that is, sending and receiving a signal are not
-   an atomic operation.  Thus, typically the caller must recheck
-   the condition after the wait completes and, if necessary, wait
-   again.
+   이 함수는 “Mesa” 스타일 모니터를 구현합니다.
+   즉, 신호를 보낸 스레드와 받는 스레드의 동작이 원자적이지 않습니다.
+   따라서 wait가 끝난 후 조건을 다시 확인하고 필요 시 재대기해야 합니다.
 
-   A given condition variable is associated with only a single
-   lock, but one lock may be associated with any number of
-   condition variables.  That is, there is a one-to-many mapping
-   from locks to condition variables.
+   조건 변수 하나는 하나의 락과 연관되지만,
+   하나의 락은 여러 조건 변수와 연관될 수 있습니다.
+   즉, 락과 조건 변수는 1:N 관계입니다.
 
-   This function may sleep, so it must not be called within an
-   interrupt handler.  This function may be called with
-   interrupts disabled, but interrupts will be turned back on if
-   we need to sleep. */
+   이 함수는 sleep할 수 있으므로 인터럽트 핸들러 내에서는 호출할 수 없습니다.
+   인터럽트가 비활성화된 상태에서도 호출 가능하지만,
+   sleep 시 인터럽트가 다시 활성화될 수 있습니다. */
 void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
@@ -288,13 +275,12 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	lock_acquire (lock);
 }
 
-/* If any threads are waiting on COND (protected by LOCK), then
-   this function signals one of them to wake up from its wait.
-   LOCK must be held before calling this function.
+/* COND(LOCK으로 보호됨)를 기다리는 스레드가 있다면,
+   그 중 하나를 깨워서 wait 상태에서 벗어나게 합니다.
+   호출 전 LOCK을 반드시 보유하고 있어야 합니다.
 
-   An interrupt handler cannot acquire a lock, so it does not
-   make sense to try to signal a condition variable within an
-   interrupt handler. */
+   인터럽트 핸들러는 락을 획득할 수 없으므로,
+   조건 변수에 신호를 보내는 것도 의미 없습니다. */
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (cond != NULL);
@@ -307,12 +293,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 					struct semaphore_elem, elem)->semaphore);
 }
 
-/* Wakes up all threads, if any, waiting on COND (protected by
-   LOCK).  LOCK must be held before calling this function.
+/* COND(LOCK으로 보호됨)를 기다리는 모든 스레드를 깨웁니다.
+   호출 전 LOCK을 반드시 보유하고 있어야 합니다.
 
-   An interrupt handler cannot acquire a lock, so it does not
-   make sense to try to signal a condition variable within an
-   interrupt handler. */
+   인터럽트 핸들러에서는 락을 획득할 수 없으므로,
+   조건 변수에 신호를 보내는 것도 의미 없습니다. */
 void
 cond_broadcast (struct condition *cond, struct lock *lock) {
 	ASSERT (cond != NULL);
