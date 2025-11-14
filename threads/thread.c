@@ -63,9 +63,8 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
-static void priority_donation(struct lock *lock_);
 
-bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux) {
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
 	const struct thread *t1 = list_entry(a, struct thread, elem);
 	const struct thread *t2 = list_entry(b, struct thread, elem);
 
@@ -218,7 +217,7 @@ thread_create (const char *name, int priority,
 
 	thread_unblock (t);
 
-	if (list_entry(list_front(&ready_list), struct thread, elem)->priority > thread_current()->priority) {
+	if (list_entry(list_front(&ready_list), struct thread, elem)->priority > curr->priority) {
 		thread_yield();
 	}
 
@@ -325,51 +324,42 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
-/*
-인자로 넘겨받은 new_priority로 현재 스레드의 우선순위 값을 변경함.
-
-우리가 해야 할 일
-1. 바뀐 우선순위 때문에 정렬을 새로 해야 함
-2. 만약 현재 스레드보다 높은 우선순위를 가진 스레드가 있다면 바로 yield
-3. 만약 현재 스레드가 가장 높다면 종료 후 yield?
-*/
+/* 인자로 넘겨받은 new_priority로 현재 스레드의 우선순위 값을 변경함. */
 void
 thread_set_priority (int new_priority) {
 	struct thread *curr = thread_current(); // 현재 실행 중인 스레드
 	curr->priority = new_priority; // 현재 실행 중인 스레드의 priority를 nwe_priority로 변환
- 
-	// ready_list의 첫번째(우선순위 기준 내림차순 정렬 되어 있음)가 현재 스레드보다 우선순위가 높으면 바로 yield
-	if(list_entry(list_front(&ready_list),struct thread, elem)->priority > curr->priority) {
-		thread_yield();
+
+	// list_front 함수 내에서 list_empty()에서 걸림 -> 먼저 리스트가 비어있는지 확인
+	if(!list_empty(&ready_list)) {		
+		// ready_list의 첫번째(우선순위 기준 내림차순 정렬 되어 있음)가 현재 스레드보다 우선순위가 높으면 바로 yield
+		if(list_entry(list_front(&ready_list),struct thread, elem)->priority > curr->priority) {
+			thread_yield();
+		}
 	}
 }
 
 /* Returns the current thread's priority. */
-// 스레드의 우선순위를 반환함
+// 현재 스레드의 우선순위를 반환함
+
+/* 구현 목록
+   1. 더 높은 priority를 반환해야 함
+   (이 말은 priority를 기부받은 경우 기부받은 priority를 반환해야 함) */
 int
 thread_get_priority (void) {
 	struct thread *curr = thread_current();
 
-	// 여기에 아마 priority_donate가 일어났는지 확인하는 과정을 거쳐야 할 거 같음
-
-	// if (curr->priority > curr->priority_before_donation) {
-	// 	return curr->priority;
-	// }
-	// else return curr->priority_before_donation;
-
+	// 만약 현재 priority가 기부 받기 전 priority와 다르다면(= 우선순위를 기부받음)
+	if (curr->priority != curr->priority_before_donation)
+		return curr->priority; // 기부받은 우선순위를 반환
+	else 
+		return curr->priority_before_donation; // 아니면 이전 우선순위를 반환
 }
 
-void 
-priority_donation(struct lock *lock_) {
-	struct lock *lock = lock_; 
-	struct thread *curr = thread_current();
-
-	if (lock->holder->priority < curr->priority) {
-		lock->holder->priority = curr->priority;
-		thread_yield();
-	}
-	
-}
+/* 우선순위 기부
+   만약 현재 실행 중인 스레드가 아닌 다른 스레드가 lock을 점유하고 있다면
+   그 스레드에게 우선순위를 기부하여 그 스레드가 먼저 실행되게 함
+*/
 
 /* Sets the current thread's nice value to NICE. */
 void

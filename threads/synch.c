@@ -32,10 +32,16 @@
    #include "threads/interrupt.h"
    #include "threads/thread.h"
    
-   bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux) {
+   static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	   const struct thread *t1 = list_entry(a, struct thread, elem);
 	   const struct thread *t2 = list_entry(b, struct thread, elem);
+   
+	   return t1->priority > t2->priority;
    } 
+   
+   void priority_donation(struct lock *lock_){
+	   lock_->holder->priority = thread_current()->priority;
+   };
    
    /*
    세마포어 SEMA를 VALUE로 초기화합니다.
@@ -69,7 +75,6 @@
 	   while (sema->value == 0) {	// 세마포어의 value == 0이면 이미 실행 중인 프로세스가 있다는 뜻.
 		   list_insert_ordered(&sema->waiters, &thread_current()->elem, priority_less, NULL);// 그래서 대기 리스트에 push하고 block
 		   thread_block ();
-   
 	   }
 	   sema->value--; // value--를 해서 
 	   intr_set_level (old_level); // 인터럽트 활성화
@@ -112,7 +117,7 @@
    
 	   old_level = intr_disable ();
 	   if (!list_empty (&sema->waiters)) // 대기 중인 스레드가 있다면
-		   thread_unblock (list_entry (list_pop_front (&sema->waiters), // 스레드를 ready 상태로 바꿈. 
+		   thread_unblock(list_entry (list_pop_front (&sema->waiters), // 스레드를 ready 상태로 바꿈. 
 					   struct thread, elem));
 	   sema->value++; 
 	   intr_set_level (old_level);
@@ -185,14 +190,19 @@
    lock_acquire (struct lock *lock) {
 	   ASSERT (lock != NULL);
 	   ASSERT (!intr_context ());
+	   enum intr_level old_level;	// 인터럽트 상태를 확인하기 위한 변수 선언
    
-	   if (!lock_held_by_current_thread (lock)) {	// 현재 실행 중인 스레드가 락을 점유하고 있지 않다면 -> 다른 스레드가 Lock을 점유하고 있다.
-		   if (lock->holder->priority < thread_current()->priority) {
-			   lock->holder->priority = thread_current()->priority;
-		   }
+	   while(!sema_try_down(&lock->semaphore))	// !sema_try_down(&lock->semaphore)로 lock 점유 시도
+	   {	
+		   // 락 점유 실패 시 현재 스레드 block
+		   old_level = intr_disable(); // 인터럽트를 비활성화
+		   priority_donation(lock);
+		   list_insert_ordered(&lock->semaphore.waiters, &thread_current()->elem, priority_less, NULL); // 대기 리스트에 우선순위를 기준으로 현재 스레드를 내림차순 삽입정렬
+		   thread_block (); // 현재 스레드 block
+		   intr_set_level(old_level); // 인터럽트 활성화
 	   }
    
-	   sema_down (&lock->semaphore);
+	   // 락 점유 성공 시 holder 변경
 	   lock->holder = thread_current ();
    }
    
@@ -222,12 +232,12 @@
    void
    lock_release (struct lock *lock) {
 	   ASSERT (lock != NULL);
-	   ASSERT (lock_held_by_current_thread (lock));
-   
-	   lock->holder->priority = lock->holder->priority_before_donation;
-   
-	   lock->holder = NULL;
-	   sema_up (&lock->semaphore);
+	   ASSERT (lock_held_by_current_thread (lock)); // 현재 스레드가 lock을 점유하고 있는지 확인
+	   
+	   lock->holder = NULL; // 현재 lock을 점유하고 있는 스레드를 제거
+	   sema_up (&lock->semaphore); // sema_up을 통해 value++를 함(lock을 점유하고 있는 스레드가 없음을 의미)
+	   
+	   thread_set_priority(thread_current()->priority_before_donation); // 현재 스레드의 priority를 기부 받기 전 priority로 변경
    }
    
    /* 현재 스레드가 LOCK을 보유하고 있다면 true,
@@ -331,5 +341,4 @@
    
 	   while (!list_empty (&cond->waiters))
 		   cond_signal (cond, lock);
-   }
-   
+   }   

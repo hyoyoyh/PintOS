@@ -8,7 +8,7 @@
 struct semaphore {
 	unsigned value;             /* 현재 값 */
 	struct list waiters;        /* 대기 중인 스레드들의 목록 */
-};
+}; 
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
@@ -37,6 +37,8 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+void priority_donation(struct lock *);
+
 
 /* Optimization barrier.
  *
