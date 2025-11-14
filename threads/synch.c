@@ -55,8 +55,8 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	while (sema->value == 0) {
-		list_insert_ordered (&sema->waiters, &thread_current ()->elem, compare_donate_priority,NULL); // 우선순위 높은거 먼저 처리는 필수임
+	if (sema->value == 0) { // 세마 0 티켓이 없읋때
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, compare_priority,NULL); // 대기자 명단에 우선순위 순으로 넣음
 		thread_block ();
 	}
 	sema->value--;
@@ -95,16 +95,19 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
-
+	struct thread *front;
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters)) // 기다리는 애가있으면 기다리고 있는 애중 block 인애 꺠우기
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)) {// 기다리는 애가있으면 기다리고 있는 애중 우선순위 순으로 block 인애 꺠우기
+	list_sort(&sema->waiters, compare_priority, NULL);
+	front = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+	thread_unblock (front);
+	}
 	sema->value++;
-	if(intr_context()) intr_yield_on_return();
-	else thread_yield();
+	if (front->priority > thread_current()->priority) {
+        thread_yield(); // 우선순위 반영;
+    }
 	intr_set_level (old_level);
 }
 
@@ -155,7 +158,6 @@ sema_test_helper (void *sema_) {
 void
 lock_init (struct lock *lock) {
 	ASSERT (lock != NULL);
-	list_init(&lock->holder->donators);
 	lock->holder = NULL;
 	sema_init (&lock->semaphore, 1);
 }
@@ -175,10 +177,10 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 	struct thread *cur = thread_current();
-	if (lock->holder != NULL) {
-		cur->waiton_lock = lock;
-		list_insert_ordered(&lock->holder->donators, &cur->elem, compare_donate_priority, NULL);
-		donate_priority(cur, 0);
+	if (lock->holder != NULL) { // 이미 락 호더가 있다면?
+		cur->waiton_lock = lock; // 현재 쓰레드가 어떤 락을 기다리는지 저장하고
+		list_insert_ordered(&lock->holder->donators, &cur->for_donating_elem, compare_donate_priority, NULL); // 삽입정렬로 현재 쓰레드르 락 호더의 기부자로 등록
+		donate_priority(cur, 0);// 현재 쓰레드를 기준으로 기부
 	}
 	sema_down (&lock->semaphore);
 	cur->waiton_lock = NULL;
@@ -217,7 +219,7 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 	struct thread *cur = thread_current();
-	donate_return(&lock);
+	donate_return(lock);
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
@@ -272,7 +274,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered (&cond->waiters, &waiter.elem, compare_priority, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -290,8 +292,9 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
-
+	
 	if (!list_empty (&cond->waiters))
+		list_sort(&cond->waiters, compare_priority, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
 }

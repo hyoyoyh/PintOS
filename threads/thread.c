@@ -218,48 +218,45 @@ bool compare_donate_priority(const struct list_elem *a,
   const struct thread *t2 = list_entry(b, struct thread, for_donating_elem);
   return t1->priority > t2->priority;
 }
-void donate_return(struct lock *lock) {
-  struct thread *holder = thread_current();      // 현재 락을 푸는 스레드
-  ASSERT(lock->holder == holder); // 현재 쓰레드가 락을 가지고있어야 된다네요
 
-  // 락이 풀렸으니 락을 기다리던애들을 리스트에서 빼주기
-  // 순회 만들기
-  // 리스트의 맨앞이 맨끝이 아니라면 == 순회완료
-  // remove 주의 사항에서 나와있는 것의 보완 버전으로 순회 및 조건 맞으면 삭제
-  // 다음으로 넘어가기
-  struct list_elem *front = list_front(&holder->donators);
-  while (front != list_end(&holder->donators)) {
-    struct thread *t = list_entry(front, struct thread, for_donating_elem);
-    struct list_elem *next = front->next;
-    if (t->waiton_lock == lock) {
-      list_remove(front);
-    }
-    front = next;
-  }
+void
+donate_return(struct lock *lock) {
+    struct thread *cur = thread_current();
+    ASSERT(lock->holder == cur);
 
-  // 2) 남은 기부자가 있으면 그 중 최고 priority와 origin_priority 중 큰 값을 채택
-  if (!list_empty(&holder->donators)) {
-    list_sort(&holder->donators, compare_donate_priority, NULL);
-    struct thread *top = list_entry(list_front(&holder->donators), struct thread, for_donating_elem);
-    holder->priority = (top->priority > holder->origin_priority) ? top->priority : holder->origin_priority;
-  } else {
-    holder->priority = holder->origin_priority;
-  }
-}
-
-void 
-donate_priority(struct thread *t, int limit) {
-    if (t == NULL || t->waiton_lock == NULL || limit >= 8 || t->waiton_lock->holder == NULL) return;
-    struct thread *holder = t->waiton_lock->holder;
-    if (t->priority > holder->priority) {
-        if (holder->priority == holder->origin_priority)
-       	 	holder->priority = t->priority;
-        if (holder->status == THREAD_READY) {
-            list_remove(&holder->elem);
-            list_insert_ordered(&ready_list, &holder->elem, compare_donate_priority, NULL);
+    struct list *donators = &cur->donators;
+    struct list_elem *sp = list_begin(donators); // 시작점
+    while (sp != list_end(donators)) { // 순회하다가 풀린 락을 기다리는 년들만 다 없애기 
+        struct thread *t = list_entry(sp, struct thread, for_donating_elem);  
+        struct list_elem *next = list_next(sp);
+        if (t->waiton_lock == lock) {
+            list_remove(sp);
         }
-        donate_priority(holder, limit + 1);
+        sp = next;
+    } 
+    if (list_empty(donators)) {
+        cur->priority = cur->origin_priority; // 기부자들이 없다면 복구
+    } else {
+        list_sort(donators, compare_donate_priority, NULL); // 기부자들이 남아있다면 재정렬하고 기부자들중 제일 높은애로 함
+        struct thread *max_pr = list_entry(list_front(donators), // 여러 락을 가진 쓰레드에서 한 락이 풀렸을때 바로 다른 기부로 전환하는 느낌
+                                        struct thread, for_donating_elem);
+        cur->priority = max_pr->priority;
     }
+}
+void
+donate_priority(struct thread *t, int limit) {
+    if (t->waiton_lock == NULL) return; // 쓰레드가 기다리는 락이 없거나 깊이 제한에 걸린다면 리턴하고
+    while (t->waiton_lock != NULL && limit < 8) {
+	struct thread *holder = t->waiton_lock->holder; // holder 단축
+    if (holder->priority < t->priority)
+    holder->priority = t->priority; // 기부하기
+	if (holder->status == THREAD_READY) { // 만약 레디리스트에 있을경우 새로고침
+            list_remove(&holder->elem);
+            list_insert_ordered(&ready_list, &holder->elem, compare_priority, NULL);
+        }
+		t = holder;
+	}
+	limit++;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -371,12 +368,21 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
- 	struct thread *front = list_entry(list_front(&ready_list),struct thread, elem);
-	if (new_priority < front->priority) {
-		thread_yield();
-	}
+    struct thread *cur = thread_current();
+    cur->origin_priority = new_priority;
+
+    if (list_empty(&cur->donators) || new_priority > cur->priority) {
+        cur->priority = new_priority;
+    }
+    if (!list_empty(&ready_list)) {
+        struct thread *front =
+            list_entry(list_front(&ready_list), struct thread, elem);
+        if (cur->priority < front->priority) {
+            thread_yield();
+        }
+    }
 }
+
 
 /* Returns the current thread's priority. */
 int
@@ -474,6 +480,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->origin_priority = priority;
 	t->magic = THREAD_MAGIC;
+	list_init(&t->donators);
+    t->waiton_lock = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
