@@ -95,6 +95,13 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
+	/*도네이션 구현에 필요한 구조체들*/
+	int init_priority;
+
+	struct lock *wait_on_lock;
+	struct list	donations;
+	struct list_elem donation_elem; 
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -140,6 +147,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void donate_priority(void);
+void refresh_priority(void);
+void remove_with_lock(struct lock *lock);
+
+bool thread_compare_donate_priority(const struct list_elem *a,
+                                    const struct list_elem *b,
+                                    void *aux);
 
 void do_iret (struct intr_frame *tf);
 
