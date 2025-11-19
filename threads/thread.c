@@ -61,12 +61,8 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
-void thread_test_preemption(void);
-void donate_priority (void);
-void refresh_priority (void);
-void remove_with_lock (struct lock *lock);
 static tid_t allocate_tid (void);
-void thread_test_preemption(void);
+static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux) {
 	const struct thread *t1 = list_entry(a, struct thread, elem);
@@ -218,11 +214,6 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	thread_test_preemption ();
-	if (t->priority>thread_current()->priority)
-	{
-		thread_yield();
-	}
 
 	return tid;
 }
@@ -320,28 +311,16 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, priority_less, NULL);
+		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
-}
-
-void 
-thread_test_preemption(void)
-{
-	if	(!list_empty (&ready_list) &&
-	thread_current ()->priority <
-	list_entry (list_front (&ready_list), struct thread, elem)->priority)
-		thread_yield ();
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 // 스레드의 우선순위를 넘겨받은 인자로 설정
 void
 thread_set_priority (int new_priority) {
-	// thread_current ()->priority = new_priority;
-	thread_current ()->init_priority = new_priority;
-	refresh_priority ();
-	thread_test_preemption ();
+	thread_current ()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
@@ -376,98 +355,6 @@ int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 	return 0;
-}
-
-bool
-thread_compare_donate_priority (const struct list_elem *l,const struct list_elem *s, void * aux UNUSED)
-{
-	return list_entry(l, struct thread, donation_elem)->priority
-			> list_entry (s, struct thread, donation_elem)->priority;
-}
-
-// void 
-// remove_with_lock (struct lock *lock)
-// {
-// 	struct list_elem *e;
-// 	struct thread *cur = thread_current ();
-
-// 	for (e = list_begin (&cur->donations); e != list_end (&cur->donations); e = list_next (e)){
-// 		struct thread *t = list_entry (e, struct thread, donation_elem);
-// 		if (t->wait_on_lock == lock)
-// 			list_remove (&t->donation_elem);
-// 	}
-// }
-
-void
-remove_with_lock (struct lock *lock)
-{
-	struct thread *t = thread_current();
-	struct list_elem *curr = list_begin(&t->donations);
-	struct thread *curr_thread = NULL;
-
-	while (curr != list_end(&t->donations)) 
-	{
-        curr_thread = list_entry(curr, struct thread, donation_elem);
-
-        if (curr_thread->wait_on_lock == lock)
-            list_remove(&curr_thread->donation_elem);
-
-        curr = list_next(curr);
-    }
-}
-
-void 
-donate_priority (void)
-{
-	int depth;
-	struct thread *t = thread_current ();
-	int priority = t->priority;
-
-	for (depth = 0; depth < 8; depth++){
-		// if (!cur->wait_on_lock) break;
-		// struct thread *holder = cur->wait_on_lock->holder;
-		// holder->priority = cur->priority;
-		// cur = holder;
-		if (t->wait_on_lock == NULL)
-			break;
-
-		t = t -> wait_on_lock->holder;
-		t -> priority = priority;
-	}
-}
-
-// void 
-// refresh_priority (void)
-// {
-// 	struct thread *cur = thread_current ();
-
-// 	cur->priority = cur->init_priority;
-
-// 	if (!list_empty (&cur->donations)) {
-// 		list_sort(&cur->donations,thread_compare_donate_priority, 0);
-
-// 		struct thread *front = list_entry (list_front (&cur->donations), struct thread,donation_elem);
-// 		if (front->priority>cur->priority)
-// 			cur->priority = front->priority;
-// 	}
-// }
-
-/** project1-Priority Inversion Problem */
-void refresh_priority(void) 
-{
-    struct thread *t = thread_current();
-    t->priority = t->init_priority;
-
-    if (list_empty(&t->donations))
-        return;
-
-    list_sort(&t->donations, thread_compare_donate_priority, NULL);
-
-    struct list_elem *max_elem = list_front(&t->donations);
-    struct thread *max_thread = list_entry(max_elem, struct thread, donation_elem);
-
-    if (t->priority < max_thread->priority)
-        t->priority = max_thread->priority;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -531,12 +418,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
-	// 도네이션 요소 초기화
-	// t->init_priority = priority;
-	t->priority = t->init_priority = priority;
-	list_init (&t->donations);
-	t->wait_on_lock = NULL;
-
 	t->magic = THREAD_MAGIC;
 }
 
