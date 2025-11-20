@@ -94,7 +94,11 @@ struct thread {
 	int64_t wakeTime;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-
+	
+	int init_priority;
+	struct lock *lock_waitingfor;
+	struct list donations;
+	struct list_elem donation_elem;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -142,5 +146,12 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+void refresh_priority(void);
+void donate_priority(void);
+void remove_donor(struct lock *lock);
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool donation_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool waiter_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 #endif /* threads/thread.h */
