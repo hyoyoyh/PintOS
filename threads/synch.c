@@ -258,7 +258,7 @@ struct semaphore_elem
 	struct semaphore semaphore; /* This semaphore. */
 };
 
-bool donation_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux)
+bool donation_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 	struct thread *ta = list_entry(a, struct thread, donation_elem);
 	struct thread *tb = list_entry(b, struct thread, donation_elem);
@@ -266,7 +266,7 @@ bool donation_priority_less(const struct list_elem *a, const struct list_elem *b
 	return ta->priority > tb->priority;
 }
 
-void donate_priority()
+void donate_priority(void)
 {
 	struct thread *curr = thread_current();
 
@@ -307,15 +307,16 @@ void remove_donor(struct lock *lock)
 	while (e != list_end(&curr->donations))
 	{
 		struct thread *t = list_entry(e, struct thread, donation_elem);
+		struct list_elem *next = list_next(e);
 		if (t->lock_waitingfor == lock)
 		{
 			list_remove(&t->donation_elem);
 		}
-		e = list_next(e);
+		e = next;
 	}
 }
 
-bool waiter_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux)
+bool waiter_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
 	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);

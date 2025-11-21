@@ -1,15 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 if [ "$BASH" != "" ]; then
-	SOURCE="${BASH_SOURCE[0]}";
+  SOURCE="${BASH_SOURCE[0]}"
 else
-	SOURCE="$0";
-fi;
+  SOURCE="$0"
+fi
 
 while [ -h "$SOURCE" ]; do
   DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
   SOURCE="$(readlink "$SOURCE")"
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
+
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-PATH=$DIR/utils:$PATH
+export PATH="$DIR/utils:$PATH"
+export PINTOS_HOME="$DIR"
+
+echo "PINTOS_HOME=$PINTOS_HOME"
+echo "PATH updated: $PATH"

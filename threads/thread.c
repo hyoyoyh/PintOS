@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -63,7 +64,7 @@ static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
 
-bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux)
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 	const struct thread *t1 = list_entry(a, struct thread, elem);
 	const struct thread *t2 = list_entry(b, struct thread, elem);

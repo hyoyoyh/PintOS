@@ -27,17 +27,18 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
-/* General process initializer for initd and other process. */
+/* initd 및 다른 프로세스들을 위한 공통 초기화 함수 */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
 }
 
-/* Starts the first userland program, called "initd", loaded from FILE_NAME.
- * The new thread may be scheduled (and may even exit)
- * before process_create_initd() returns. Returns the initd's
- * thread id, or TID_ERROR if the thread cannot be created.
- * Notice that THIS SHOULD BE CALLED ONCE. */
+/* "initd"라는 첫 번째 유저 프로그램을 시작한다.
+ * FILE_NAME에서 바이너리를 로드해서 실행하는 새 스레드를 만든다.
+ * 새 스레드는 process_create_initd()가 리턴하기도 전에 실행되거나 종료될 수도 있다.
+ * initd의 스레드 id를 반환하며, 실패하면 TID_ERROR를 반환한다.
+ * 이 함수는 단 한 번만 호출되어야 한다.
+ */
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
@@ -57,7 +58,7 @@ process_create_initd (const char *file_name) {
 	return tid;
 }
 
-/* A thread function that launches first user process. */
+/* 첫 번째 유저 프로세스(initd)를 실행시키는 스레드 함수 */
 static void
 initd (void *f_name) {
 #ifdef VM
@@ -71,8 +72,9 @@ initd (void *f_name) {
 	NOT_REACHED ();
 }
 
-/* Clones the current process as `name`. Returns the new process's thread id, or
- * TID_ERROR if the thread cannot be created. */
+/* 현재 프로세스를 name이라는 이름으로 복제(fork)한다.
+ * 새 프로세스의 thread id를 반환하며, 실패하면 TID_ERROR.
+ */
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
@@ -81,8 +83,10 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 }
 
 #ifndef VM
-/* Duplicate the parent's address space by passing this function to the
- * pml4_for_each. This is only for the project 2. */
+/* 부모의 주소 공간을 복제하기 위한 함수.
+ * pml4_for_each()의 콜백으로 사용된다.
+ * Project 2에서만 사용되는 코드.
+ */
 static bool
 duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
@@ -112,10 +116,10 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 }
 #endif
 
-/* A thread function that copies parent's execution context.
- * Hint) parent->tf does not hold the userland context of the process.
- *       That is, you are required to pass second argument of process_fork to
- *       this function. */
+/* 부모 프로세스의 실행 컨텍스트를 복사하는 스레드 함수.
+ * process_fork()가 넘긴 parent_if 값을 사용해야 한다.
+ * parent->tf는 실제 유저 컨텍스트를 가지고 있지 않기 때문.
+ */
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
@@ -158,16 +162,18 @@ error:
 	thread_exit ();
 }
 
-/* Switch the current execution context to the f_name.
- * Returns -1 on fail. */
+/* 현재 프로세스의 실행 컨텍스트를 f_name으로 교체한다.
+ * 실패하면 -1을 반환한다.
+ */
 int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
+	/* thread 구조체 안에 intr_frame 을 사용할 수 없다.
+	* 왜냐하면 현재 스레드가 스케줄링에서 밀려날 때,
+	* 실행 정보를 그 멤버에 저장하기 때문이다.
+	*/
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -175,7 +181,7 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
-
+	
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
@@ -190,15 +196,14 @@ process_exec (void *f_name) {
 }
 
 
-/* Waits for thread TID to die and returns its exit status.  If
- * it was terminated by the kernel (i.e. killed due to an
- * exception), returns -1.  If TID is invalid or if it was not a
- * child of the calling process, or if process_wait() has already
- * been successfully called for the given TID, returns -1
- * immediately, without waiting.
+/* TID 스레드가 종료될 때까지 기다리고 exit status를 반환한다.
+ * - 커널에서 kill당한 경우: -1
+ * - 자식이 아닌 경우: -1
+ * - 이미 wait 한 자식인 경우: -1
  *
- * This function will be implemented in problem 2-2.  For now, it
- * does nothing. */
+ * Project 2-2에서 구현할 함수.
+ * 지금은 아무 기능 없음.
+ */
 int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
@@ -207,7 +212,10 @@ process_wait (tid_t child_tid UNUSED) {
 	return -1;
 }
 
-/* Exit the process. This function is called by thread_exit (). */
+/* 프로세스를 종료한다.
+ * thread_exit()에서 호출된다.
+ * 여기서 프로세스 종료 메시지 출력 및 리소스 정리를 구현해야 한다.
+ */
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
@@ -219,7 +227,9 @@ process_exit (void) {
 	process_cleanup ();
 }
 
-/* Free the current process's resources. */
+/* 현재 프로세스의 리소스를 해제한다.
+ * 페이지 디렉토리를 제거하며, 커널 전용 페이지 디렉토리로 복구한다.
+ */
 static void
 process_cleanup (void) {
 	struct thread *curr = thread_current ();
@@ -233,21 +243,25 @@ process_cleanup (void) {
 	 * to the kernel-only page directory. */
 	pml4 = curr->pml4;
 	if (pml4 != NULL) {
-		/* Correct ordering here is crucial.  We must set
-		 * cur->pagedir to NULL before switching page directories,
-		 * so that a timer interrupt can't switch back to the
-		 * process page directory.  We must activate the base page
-		 * directory before destroying the process's page
-		 * directory, or our active page directory will be one
-		 * that's been freed (and cleared). */
+		/* 여기서는 올바른 실행 순서가 매우 중요하다.
+		* 타이머 인터럽트가 다시 프로세스의 페이지 디렉터리로
+		* 전환하지 못하도록, 페이지 디렉터리를 교체하기 전에
+		* 반드시 cur->pagedir 을 NULL로 설정해야 한다.
+		* 또한 프로세스의 페이지 디렉터리를 삭제하기 전에
+		* 기본 페이지 디렉터리를 활성화해야 한다.
+		* 그렇지 않으면 이미 해제(그리고 초기화)된 페이지
+		* 디렉터리를 활성 페이지 디렉터리로 사용하게 되는 문제가 생긴다. */
+
 		curr->pml4 = NULL;
 		pml4_activate (NULL);
 		pml4_destroy (pml4);
 	}
 }
 
-/* Sets up the CPU for running user code in the nest thread.
- * This function is called on every context switch. */
+/* 다음 스레드가 유저 코드를 실행할 수 있도록 CPU 상태 설정.
+ * 페이지 테이블 활성화 및 TSS 업데이트.
+ */
+
 void
 process_activate (struct thread *next) {
 	/* Activate thread's page tables. */
@@ -259,6 +273,8 @@ process_activate (struct thread *next) {
 
 /* We load ELF binaries.  The following definitions are taken
  * from the ELF specification, [ELF1], more-or-less verbatim.  */
+/* ELF 실행파일 포맷 정의. ELF 명세를 거의 그대로 가져온 것. */
+
 
 /* ELF types.  See [ELF1] 1-2. */
 #define EI_NIDENT 16
@@ -426,8 +442,9 @@ done:
 }
 
 
-/* Checks whether PHDR describes a valid, loadable segment in
- * FILE and returns true if so, false otherwise. */
+/* 프로그램 헤더가 유효한 로드 가능한 세그먼트인지 검사한다.
+ * 조건에 맞으면 true, 아니면 false.
+ */
 static bool
 validate_segment (const struct Phdr *phdr, struct file *file) {
 	/* p_offset and p_vaddr must have the same page offset. */
@@ -478,20 +495,17 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 /* load() helpers. */
 static bool install_page (void *upage, void *kpage, bool writable);
 
-/* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
+/* 파일의 OFS 위치에서 시작하는 세그먼트를
+ * 유저 가상주소 UPAGE에 적재한다.
  *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
+ * READ_BYTES: 파일에서 읽어올 바이트 수
+ * ZERO_BYTES: 남은 부분을 0으로 초기화할 바이트 수
  *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+ * WRITABLE: 해당 페이지가 사용자 쓰기 가능한지 여부
  *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
- *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+ * 성공하면 true, 실패하면 false.
+ */
+
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
@@ -534,7 +548,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-/* Create a minimal stack by mapping a zeroed page at the USER_STACK */
+/* 유저 스택(USER_STACK) 아래에 0으로 초기화된 페이지를 하나 매핑해
+ * 최소한의 스택을 만든다.
+ * 성공하면 rsp를 USER_STACK으로 설정하고 true 반환.
+ */
+
 static bool
 setup_stack (struct intr_frame *if_) {
 	uint8_t *kpage;
@@ -551,15 +569,12 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 
-/* Adds a mapping from user virtual address UPAGE to kernel
- * virtual address KPAGE to the page table.
- * If WRITABLE is true, the user process may modify the page;
- * otherwise, it is read-only.
- * UPAGE must not already be mapped.
- * KPAGE should probably be a page obtained from the user pool
- * with palloc_get_page().
- * Returns true on success, false if UPAGE is already mapped or
- * if memory allocation fails. */
+/* 유저 가상주소 UPAGE에 커널 주소 KPAGE를 매핑한다.
+ * WRITABLE이 true면 유저가 페이지를 수정 가능.
+ * 이미 매핑된 주소면 실패.
+ * 성공 시 true 반환.
+ */
+
 static bool
 install_page (void *upage, void *kpage, bool writable) {
 	struct thread *t = thread_current ();
