@@ -35,32 +35,36 @@ struct gp_registers {
 } __attribute__((packed));
 
 struct intr_frame {
-	/* Pushed by intr_entry in intr-stubs.S.
-	   These are the interrupted task's saved registers. */
-	struct gp_registers R;
-	uint16_t es;
-	uint16_t __pad1;
-	uint32_t __pad2;
-	uint16_t ds;
-	uint16_t __pad3;
-	uint32_t __pad4;
-	/* Pushed by intrNN_stub in intr-stubs.S. */
-	uint64_t vec_no; /* Interrupt vector number. */
-/* Sometimes pushed by the CPU,
-   otherwise for consistency pushed as 0 by intrNN_stub.
-   The CPU puts it just under `eip', but we move it here. */
-	uint64_t error_code;
-/* Pushed by the CPU.
-   These are the interrupted task's saved registers. */
-	uintptr_t rip;
-	uint16_t cs;
-	uint16_t __pad5;
-	uint32_t __pad6;
-	uint64_t eflags;
-	uintptr_t rsp;
-	uint16_t ss;
-	uint16_t __pad7;
-	uint32_t __pad8;
+    /* intr-stubs.S의 intr_entry가 푸시하는 값들.
+       이는 인터럽트가 걸렸던 태스크의 저장된 레지스터들이다. */
+    struct gp_registers R;
+
+    uint16_t es;
+    uint16_t __pad1;
+    uint32_t __pad2;
+    uint16_t ds;
+    uint16_t __pad3;
+    uint32_t __pad4;
+
+    /* intr-stubs.S의 intrNN_stub이 푸시하는 값. */
+    uint64_t vec_no; /* 인터럽트 벡터 번호. */
+
+    /* 어떤 경우에는 CPU가 푸시하고,
+       그렇지 않은 경우 intrNN_stub이 일관성을 위해 0으로 푸시한다.
+       CPU는 이 값을 `eip` 바로 아래에 두지만, 우리는 이것을 여기로 옮긴다. */
+    uint64_t error_code;
+
+    /* CPU가 푸시하는 값들.
+       이는 인터럽트가 걸린 태스크의 저장된 레지스터들이다. */
+    uintptr_t rip;
+    uint16_t cs;
+    uint16_t __pad5;
+    uint32_t __pad6;
+    uint64_t eflags;
+    uintptr_t rsp;
+    uint16_t ss;
+    uint16_t __pad7;
+    uint32_t __pad8;
 } __attribute__((packed));
 
 typedef void intr_handler_func (struct intr_frame *);

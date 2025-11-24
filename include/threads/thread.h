@@ -90,9 +90,13 @@ struct thread {
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	int priority;
+	int init_priority;                       /* Priority. */
 	int64_t wakeTime;
+	struct lock *lock_waitingfor;
+	struct list donations;
 	/* Shared between thread.c and synch.c. */
+	struct list_elem donation_elem;
 	struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
@@ -142,5 +146,12 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux );
+bool donation_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void refresh_priority(void);
+void thread_preempt(void);
+void remove_donor(struct lock *lock);
+bool waiter_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void donate_priority(void);
 
 #endif /* threads/thread.h */

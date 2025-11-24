@@ -182,39 +182,41 @@ strstr (const char *haystack, const char *needle) {
 	return NULL;
 }
 
-/* Breaks a string into tokens separated by DELIMITERS.  The
-   first time this function is called, S should be the string to
-   tokenize, and in subsequent calls it must be a null pointer.
-   SAVE_PTR is the address of a `char *' variable used to keep
-   track of the tokenizer's position.  The return value each time
-   is the next token in the string, or a null pointer if no
-   tokens remain.
+// 문자열을 DELIMITERS 로 구분된 토큰(token)들로 분리한다.
+// 이 함수가 처음 호출될 때는 S 에 분리할 문자열을 넘겨야 하고,
+// 이후 호출에서는 반드시 S 값을 NULL로 넘겨야 한다.
 
-   This function treats multiple adjacent delimiters as a single
-   delimiter.  The returned tokens will never be length 0.
-   DELIMITERS may change from one call to the next within a
-   single string.
+// SAVE_PTR 는 char * 변수를 가리키는 포인터로,
+// 토크나이저(tokenizer)의 현재 위치를 추적하는 데 사용된다.
 
-   strtok_r() modifies the string S, changing delimiters to null
-   bytes.  Thus, S must be a modifiable string.  String literals,
-   in particular, are *not* modifiable in C, even though for
-   backward compatibility they are not `const'.
+// 매 호출마다 다음 토큰의 포인터를 반환하며,
+// 남은 토큰이 없으면 NULL 을 반환한다.
 
-   Example usage:
+// 이 함수는 여러 개의 구분자가 연속되더라도 하나의 구분자로 처리한다.
+// 반환되는 토큰은 길이가 0일 수 없다.
+// 하나의 문자열을 처리하는 동안에도 DELIMITERS 값은 매번 바뀔 수 있다.
 
-   char s[] = "  String to  tokenize. ";
-   char *token, *save_ptr;
+// strtok_r()는 문자열 S를 직접 수정한다.
+// 구분자(delimiter)들을 널 바이트(‘\0’)로 바꿔버린다.
+// 따라서 S는 수정 가능한 문자열이어야 한다.
+// 특히 문자열 리터럴은 C에서 뒤호환성 때문에 const 가 아니지만,
+// 실제로는 수정 불가능하므로 사용하면 안 된다.
 
-   for (token = strtok_r (s, " ", &save_ptr); token != NULL;
-   token = strtok_r (NULL, " ", &save_ptr))
-   printf ("'%s'\n", token);
+// 사용 예시:
 
-outputs:
+// char s[] = " String to tokenize. ";
+// char *token, *save_ptr;
 
-'String'
-'to'
-'tokenize.'
-*/
+// for (token = strtok_r (s, " ", &save_ptr); token != NULL;
+// token = strtok_r (NULL, " ", &save_ptr))
+// printf ("'%s'\n", token);
+
+// 출력 결과:
+
+// 'String'
+// 'to'
+// 'tokenize.'
+// */
 char *
 strtok_r (char *s, const char *delimiters, char **save_ptr) {
 	char *token;

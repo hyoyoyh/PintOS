@@ -3,6 +3,8 @@
         "timer.h": "c",
         "inttypes.h": "c",
         "interrupt.h": "c",
-        "io.h": "c"
+        "io.h": "c",
+        "compare": "c",
+        "cstdint": "c"
     }
 }

@@ -35,7 +35,7 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void thread_wake_up(void);
-static bool sleep_list_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+static bool sleep_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 bool sleep_list_less(const struct list_elem *a, const struct list_elem *b, void *aux) {
 	const struct thread *t1 = list_entry(a, struct thread, elem);
