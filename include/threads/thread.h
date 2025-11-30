@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include "threads/synch.h"
 #include <stdint.h>
 #include "threads/interrupt.h"
 #ifdef VM
@@ -94,7 +95,6 @@ struct thread {
 	int64_t wakeTime;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	
 	int init_priority;
 	struct lock *lock_waitingfor;
 	struct list donations;
@@ -102,6 +102,13 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	int exit_status;                    /* Process's exit status */\
+	/* For process hierarchy */
+	struct thread *parent;              /* 부모 프로세스 포인터 */
+	struct list child_list;             /* 자식 프로세스 리스트 */
+	struct list_elem child_elem;        /* 부모의 child_list에 연결될 요소 */
+	/* For process synchronization */
+	struct semaphore wait_sema;         /* 자식의 종료를 기다리기 위한 세마포어 */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

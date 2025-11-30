@@ -23,7 +23,7 @@ pgdir_walk (uint64_t *pdp, const uint64_t va, int create) {
 			} else
 				return NULL;
 		}
-		return (uint64_t *) ptov (PTE_ADDR (pdp[idx]) + 8 * PTX (va));
+		return (uint64_t *) ptov (PTE_ADDR (pdp[idx])) + PTX (va); // 수정된 형태
 	}
 	return NULL;
 }

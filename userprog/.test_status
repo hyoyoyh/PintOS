@@ -1,0 +1,6 @@
+args-multiple FAIL
+alarm-single FAIL
+args-none PASS
+create-bad-ptr FAIL
+args-many FAIL
+args-single FAIL

@@ -80,13 +80,13 @@ main (void) {
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
 	thread_init ();
-	console_init ();
 
 	/* Initialize memory system. */
 	mem_end = palloc_init ();
 	malloc_init ();
 	paging_init (mem_end);
-
+	   
+	console_init ();
 #ifdef USERPROG
 	tss_init ();
 	gdt_init ();

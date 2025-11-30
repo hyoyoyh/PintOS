@@ -8,9 +8,40 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 
+/* 사용자 주소의 유효성을 검사하는 함수 */
+static void
+check_address(const void *addr) {
+    if (addr == NULL || !is_user_vaddr(addr)) {
+        exit(-1);
+    }
+}
+
+/* 버퍼의 유효성을 검사하는 함수 */
+static void
+check_buffer(const void *buffer, unsigned size) {
+    for (unsigned i = 0; i < size; i++) {
+        check_address(buffer + i);
+    }
+}
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+void exit(int status) {
+	struct thread *cur = thread_current();
+	cur->exit_status = status;
+	printf("%s: exit(%d)\n", cur->name, status);
+	thread_exit();
+}
+
+int write(int fd, const void *buffer, unsigned size) {
+	check_buffer(buffer, size); // 버퍼 유효성 검사
+	if (fd == 1) { // STDOUT
+		putbuf(buffer, size);
+		return size;
+	}
+	return -1;
+}
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -39,8 +70,22 @@ syscall_init (void) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+syscall_handler (struct intr_frame *f) {
+	// 시스템 콜 번호는 rax 레지스터에 저장됩니다.
+	uint64_t syscall_no = f->R.rax;
+
+	switch (syscall_no) {
+		case SYS_EXIT:
+			exit(f->R.rdi);
+			break;
+		case SYS_WRITE:
+			check_address(f->R.rsi); // buffer 주소 유효성 검사
+			f->R.rax = write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
+			break;
+		case SYS_HALT:
+			power_off();
+			break;
+		default:
+			thread_exit ();
+	}
 }
