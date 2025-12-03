@@ -210,6 +210,11 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+#ifdef USERPROG
+	/* Add to parent's child list */
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+#endif
+
 	/* Add to run queue. */
 	thread_unblock(t);
 	if (t->priority > thread_current()->priority)
@@ -439,6 +444,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->init_priority = priority;
 	t->lock_waitingfor = NULL;
 	list_init(&t->donations);
+#ifdef USERPROG
+	list_init(&t->child_list);
+#endif
 	t->magic = THREAD_MAGIC;
 }
 

@@ -117,7 +117,11 @@ void sema_up(struct semaphore *sema)
 	}
 	sema->value++;
 	intr_set_level(old_level);
-	thread_yield();
+
+	// 현재 스레드보다 높은 우선순위의 스레드가 ready_list에 있다면 양보합니다.
+	if (!list_empty(&sema->waiters) && thread_current()->priority < list_entry(list_front(&sema->waiters), struct thread, elem)->priority) {
+		thread_yield();
+	}
 }
 
 static void sema_test_helper(void *sema_);

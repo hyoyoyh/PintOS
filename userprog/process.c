@@ -54,6 +54,24 @@ process_create_initd (const char *file_name) {
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+
+	// 자식 스레드를 찾아 부모-자식 관계를 설정하고 세마포어를 초기화합니다.
+	struct thread *child = NULL;
+	struct list_elem *e;
+	for (e = list_begin(&thread_current()->child_list); e != list_end(&thread_current()->child_list); e = list_next(e)) {
+		struct thread *t = list_entry(e, struct thread, child_elem);
+		if (t->tid == tid) {
+			child = t;
+			child->parent = thread_current();
+			sema_init(&child->wait_sema, 0);
+			break;
+		}
+	}
+
+	if (child == NULL) { // 만약 자식을 찾지 못했다면 에러 처리
+		return TID_ERROR;
+	}
+
 	return tid;
 }
 
@@ -180,7 +198,6 @@ process_exec (void *f_name) {
 	success = load (file_name, &_if);
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
 	if (!success)
 		return -1;
 
@@ -201,11 +218,35 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	return -1;
+	struct thread *curr = thread_current();
+	struct thread *child = NULL;
+
+	// 1. 자식 리스트에서 해당 tid를 가진 자식 스레드를 찾습니다.
+	struct list_elem *e;
+	for (e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)) {
+		struct thread *t = list_entry(e, struct thread, child_elem);
+		if (t->tid == child_tid) {
+			child = t;
+			break;
+		}
+	}
+
+	// 자식이 없거나 이미 wait한 경우
+	if (child == NULL) {
+		return -1;
+	}
+
+	// 2. 자식이 종료될 때까지 기다립니다. (sema_down)
+	sema_down(&child->wait_sema);
+
+	// 3. 자식의 종료 상태를 가져오고, 자식 리스트에서 제거합니다.
+	int exit_status = child->exit_status;
+	list_remove(&child->child_elem);
+
+	// 4. 자식의 종료 상태를 반환합니다.
+	return exit_status;
 }
+
 
 /* Exit the process. This function is called by thread_exit (). */
 void
@@ -217,6 +258,11 @@ process_exit (void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
 	process_cleanup ();
+
+	// 부모 프로세스가 기다리고 있다면 깨워줍니다.
+	if (curr->parent != NULL) {
+		sema_up(&curr->wait_sema);
+	}
 }
 
 /* Free the current process's resources. */
@@ -335,10 +381,25 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	// strtok_r이 file_name을 변경시키므로, 파일 이름 부분을 먼저 복사합니다.
+	char *file_name_copy = palloc_get_page(0);
+	if (file_name_copy == NULL)
+		goto done;
+	strlcpy(file_name_copy, file_name, PGSIZE);
+	
+	// 1. 인자 파싱
+	char *token, *save_ptr;
+	int argc = 0;
+	char *argv[64]; // 인자 최대 64개로 가정
+
+	for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+		argv[argc++] = token;
+	}
+
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", argv[0]);
 		goto done;
 	}
 
@@ -350,7 +411,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf ("load: %s: error loading executable\n", argv[0]);
 		goto done;
 	}
 
@@ -417,6 +478,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
+	// 2. 파싱된 인자를 스택에 저장 (setup_stack에서 처리)
+	setup_stack_args(if_, argc, argv);
+
+	palloc_free_page(file_name_copy);
 	success = true;
 
 done:
@@ -424,6 +489,46 @@ done:
 	file_close (file);
 	return success;
 }
+
+void setup_stack_args(struct intr_frame *if_, int argc, char **argv) {
+	// 1. 문자열 인자들을 스택에 push (오른쪽부터)
+	char *arg_addresses[argc];
+	for (int i = argc - 1; i >= 0; i--) {
+		int len = strlen(argv[i]) + 1; // +1 for null terminator
+		if_->rsp -= len;
+		memcpy(if_->rsp, argv[i], len);
+		arg_addresses[i] = if_->rsp;
+	}
+
+	// 2. Word-align (8-byte alignment)
+	while (if_->rsp % 8 != 0) {
+		if_->rsp--;
+		*(uint8_t *)if_->rsp = 0;
+	}
+
+	// 3. argv 배열의 끝을 표시하는 null 포인터 sentinel
+	if_->rsp -= 8;
+	*(uint64_t *)if_->rsp = 0;
+
+	// 4. 인자 문자열들의 주소를 스택에 push (오른쪽부터)
+	for (int i = argc - 1; i >= 0; i--) {
+		if_->rsp -= 8;
+		*(uint64_t *)if_->rsp = (uint64_t)arg_addresses[i];
+	}
+
+	// 5. 가짜 반환 주소 (fake return address)
+	if_->rsp -= 8;
+	*(uint64_t *)if_->rsp = 0;
+
+	// 6. 레지스터 설정
+	if_->R.rdi = argc;       // 첫 번째 인자 (argc)
+	if_->R.rsi = if_->rsp + 8; // 두 번째 인자 (argv)
+}
+
+
+
+
+
 
 
 /* Checks whether PHDR describes a valid, loadable segment in
@@ -544,7 +649,9 @@ setup_stack (struct intr_frame *if_) {
 	if (kpage != NULL) {
 		success = install_page (((uint8_t *) USER_STACK) - PGSIZE, kpage, true);
 		if (success)
-			if_->rsp = USER_STACK;
+			// if_->rsp = USER_STACK; // 이 줄은 setup_stack_args에서 스택을 직접 조작하므로 주석 처리하거나 삭제합니다.
+			// 초기 스택 포인터를 설정합니다.
+			if_->rsp = USER_STACK; 
 		else
 			palloc_free_page (kpage);
 	}
